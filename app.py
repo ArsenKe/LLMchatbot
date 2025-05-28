@@ -30,31 +30,32 @@ def respond(
     top_p: float,
 ):
     """Generate chatbot response using the Hugging Face Inference API"""
-    # Format conversation history
-    messages = [{"role": "system", "content": system_message}]
+    # Format input for MT5
+    prompt = f"{system_message}\n\n"
     
     # Add conversation history
     for user_msg, bot_msg in history:
         if user_msg:
-            messages.append({"role": "user", "content": user_msg})
+            prompt += f"Human: {user_msg}\n"
         if bot_msg:
-            messages.append({"role": "assistant", "content": bot_msg})
+            prompt += f"Assistant: {bot_msg}\n"
     
     # Add current message
-    messages.append({"role": "user", "content": message})
+    prompt += f"Human: {message}\nAssistant:"
     
     # Generate response with streaming
     response = ""
     try:
-        for message in client.chat_completion(
-            messages,
-            max_tokens=max_tokens,
+        for output in client.text_generation(
+            prompt,
+            max_new_tokens=max_tokens,
             stream=True,
             temperature=temperature,
             top_p=top_p,
+            do_sample=True,
+            repetition_penalty=1.2
         ):
-            token = message.choices[0].delta.content
-            response += token
+            response += output
             yield response
     except Exception as e:
         yield f"Error: {str(e)}"
