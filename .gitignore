@@ -1,0 +1,35 @@
+# Virtual Environment
+venv/
+env/
+tests
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE
+.vscode/
+.idea/
+
+# Environment variables
+.env
+*.env
+.gitattributes
+# Credentials
+src/firebase-credentials.json
+
+# Embedded repos
+RLHF_external_APIs/
+
+# Gradio
+.gradio/
+flagged/
+
+# Model files
+*.pth
+*.bin
+*.model
+
+# Operating System
+.DS_Store
+Thumbs.db

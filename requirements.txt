@@ -1,0 +1,19 @@
+# transformers==4.34.0
+# --extra-index-url https://download.pytorch.org/whl/cpu
+# torch==2.1.0+cpu
+# torchvision==0.16.0+cpu
+# torchaudio==2.1.0+cpu
+# numpy>=1.26.2
+# sentencepiece==0.1.99
+# protobuf==4.25.1
+langchain==0.3.25
+langchain-community==0.3.24
+transformers==4.40.0
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.1.0+cpu
+torchvision==0.16.0+cpu
+gradio==4.18.0
+python-dotenv==1.0.0
+requests>=2.31.0
+sentencepiece
+protobuf
