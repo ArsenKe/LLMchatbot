@@ -1,15 +1,25 @@
+import os
+import sys
 import gradio as gr
 from huggingface_hub import InferenceClient
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 
 # Load environment variables
-load_dotenv()
+load_dotenv(find_dotenv())
+
+# Check if API key is available
+if not os.getenv("HUGGINGFACE_API_KEY"):
+    raise ValueError("HUGGINGFACE_API_KEY not found in environment variables")
 
 # Initialize the client with your model and API token
-client = InferenceClient(
-    "ArsenKe/MT5_large_finetuned_chatbot",
-    token=os.getenv("HUGGINGFACE_API_KEY")
-)
+try:
+    client = InferenceClient(
+        "ArsenKe/MT5_large_finetuned_chatbot",
+        token=os.getenv("HUGGINGFACE_API_KEY")
+    )
+except Exception as e:
+    print(f"Error initializing client: {str(e)}")
+    sys.exit(1)
 
 def respond(
     message: str,
