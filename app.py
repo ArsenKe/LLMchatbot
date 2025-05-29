@@ -1,13 +1,13 @@
-from fastapi import FastAPI, HTTPException, Depends
-from fastapi.middleware.cors import CORSMiddleware
-from huggingface_hub import InferenceClient
-from pydantic import BaseModel, BaseSettings
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from pydantic_settings import BaseSettings  # Updated import
 from dotenv import load_dotenv
 import logging
 import os
 from tourism_tools import hotel_tool
 from telegram_bot import telegram_router
 from twilio_whatsapp import whatsapp_router
+from huggingface_hub import InferenceClient
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # Environment settings
-class Settings(BaseSettings):
+class Settings(BaseSettings):  # Now from pydantic_settings
     huggingface_api_key: str
     makcorps_api_key: str
     telegram_token: str
@@ -28,21 +28,17 @@ class Settings(BaseSettings):
         env_file = ".env"
 
 # Initialize settings
-settings = Settings()
+try:
+    settings = Settings()
+except Exception as e:
+    logger.error(f"Configuration error: {str(e)}")
+    raise
 
 # Initialize FastAPI app
 app = FastAPI(
     title="Tourism Chat Assistant",
     description="Chat interface using MT5 model for tourism assistance",
     version="1.0.0"
-)
-
-# Configure CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"]
 )
 
 # Initialize HuggingFace client
@@ -94,21 +90,13 @@ async def chat_endpoint(request: ChatRequest):
         logger.error(f"Chat error: {str(e)}")
         raise HTTPException(status_code=500, detail="Processing error")
 
-# Enhanced health check endpoint
 @app.get("/health")
 async def health_check():
     try:
-        # Test model connection
-        client.get_model_status()
+        # Simple health check
         return {
             "status": "healthy",
-            "model": "ArsenKe/MT5_large_finetuned_chatbot",
-            "version": "1.0.0",
-            "services": {
-                "huggingface": "connected",
-                "telegram": bool(settings.telegram_token),
-                "twilio": bool(settings.twilio_account_sid)
-            }
+            "model": "ArsenKe/MT5_large_finetuned_chatbot"
         }
     except Exception as e:
         logger.error(f"Health check failed: {str(e)}")

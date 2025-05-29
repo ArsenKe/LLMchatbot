@@ -21,6 +21,7 @@ requests==2.32.3
 huggingface_hub==0.25.2
 twilio==8.19.0; python_version < '3.11'
 twilio==9.6.2; python_version >= '3.11'
+pydantic-settings==2.2.1  # New dependency
 python-multipart==0.0.9
 transformers==4.40.0
 sentencepiece

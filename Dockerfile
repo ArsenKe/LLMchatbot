@@ -26,9 +26,5 @@ ENV PORT=7860
 # Expose port
 EXPOSE ${PORT}
 
-# Add health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:${PORT}/health || exit 1
-
 # Start command
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]
