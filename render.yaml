@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: tourism-chat-assistant
+    env: python
+    runtime: python3
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    plan: free
+    envVars:
+      - key: HUGGINGFACE_API_KEY
+        sync: false
+      - key: TELEGRAM_TOKEN
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+    healthCheckPath: /health
+    autoDeploy: true

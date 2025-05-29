@@ -1,99 +1,88 @@
-import os
-import sys
-import gradio as gr
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from huggingface_hub import InferenceClient
-from dotenv import load_dotenv, find_dotenv
+from dotenv import load_dotenv
+import logging
+import os
+from tourism_tools import hotel_tool
+from telegram_bot import telegram_router
+from twilio_whatsapp import whatsapp_router
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Load environment variables
-load_dotenv(find_dotenv())
+load_dotenv()
 
-# Check if API key is available
-if not os.getenv("HUGGINGFACE_API_KEY"):
-    raise ValueError("HUGGINGFACE_API_KEY not found in environment variables")
+# Initialize FastAPI app
+app = FastAPI(
+    title="Tourism Chat Assistant",
+    description="Chat interface using MT5 model for tourism assistance"
+)
 
-# Initialize the client with your model and API token
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
+
+# Initialize HuggingFace client
 try:
     client = InferenceClient(
         "ArsenKe/MT5_large_finetuned_chatbot",
         token=os.getenv("HUGGINGFACE_API_KEY")
     )
 except Exception as e:
-    print(f"Error initializing client: {str(e)}")
-    sys.exit(1)
+    logger.error(f"Error initializing client: {str(e)}")
+    raise
 
-def respond(
-    message: str,
-    history: list[tuple[str, str]],
-    system_message: str,
-    max_tokens: int,
-    temperature: float,
-    top_p: float,
-):
-    """Generate chatbot response using the Hugging Face Inference API"""
-    # Format input for MT5
-    prompt = f"{system_message}\n\n"
-    
-    # Add conversation history
-    for user_msg, bot_msg in history:
-        if user_msg:
-            prompt += f"Human: {user_msg}\n"
-        if bot_msg:
-            prompt += f"Assistant: {bot_msg}\n"
-    
-    # Add current message
-    prompt += f"Human: {message}\nAssistant:"
-    
-    # Generate response with streaming
-    response = ""
+# Import and include routers
+app.include_router(telegram_router, prefix="/telegram")
+app.include_router(whatsapp_router, prefix="/whatsapp")
+
+# Request model
+class ChatRequest(BaseModel):
+    message: str
+    session_id: str = "default"
+
+@app.post("/chat")
+async def chat_endpoint(request: ChatRequest):
     try:
-        for output in client.text_generation(
-            prompt,
-            max_new_tokens=max_tokens,
-            stream=True,
-            temperature=temperature,
-            top_p=top_p,
-            do_sample=True,
-            repetition_penalty=1.2
-        ):
-            response += output
-            yield response
+        # Enhanced context-aware prompt
+        enhanced_prompt = (
+            "You are a tourism assistant specializing in hotel bookings. "
+            "When asked about hotels, use the hotel search tool. "
+            "For other travel questions, provide helpful advice.\n\n"
+            f"User: {request.message}\n"
+            "Assistant:"
+        )
+        
+        # Check if hotel search is needed
+        if "hotel" in request.message.lower() or "stay" in request.message.lower():
+            # Extract parameters from message
+            location = "Paris"  # Simplified - use NLP in production
+            response = hotel_tool.run(location, "2024-06-15")
+        else:
+            response = client.text_generation(
+                enhanced_prompt,
+                max_new_tokens=150,
+                temperature=0.7,
+                top_p=0.9
+            )
+            
+        return {"response": response, "session_id": request.session_id}
     except Exception as e:
-        yield f"Error: {str(e)}"
+        logger.error(f"Chat error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Processing error")
 
-# Create Gradio interface
-demo = gr.ChatInterface(
-    respond,
-    title="LangChain Chat Assistant",
-    description="Ask me anything! I use MT5-large fine-tuned model to generate responses.",
-    additional_inputs=[
-        gr.Textbox(
-            value="You are a helpful tourism assistant that can search for hotels and provide information.",
-            label="System message"
-        ),
-        gr.Slider(
-            minimum=1,
-            maximum=512,
-            value=150,
-            step=1,
-            label="Max tokens"
-        ),
-        gr.Slider(
-            minimum=0.1,
-            maximum=2.0,
-            value=0.7,
-            step=0.1,
-            label="Temperature"
-        ),
-        gr.Slider(
-            minimum=0.1,
-            maximum=1.0,
-            value=0.9,
-            step=0.05,
-            label="Top-p"
-        ),
-    ],
-    theme="soft"
-)
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "model": "ArsenKe/MT5_large_finetuned_chatbot"}
 
 if __name__ == "__main__":
-    demo.launch()
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=7860)
