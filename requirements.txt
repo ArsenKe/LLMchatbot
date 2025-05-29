@@ -11,11 +11,17 @@
 # protobuf
 # huggingface_hub==0.25.2
 
+
 fastapi==0.110.0
 uvicorn==0.29.0
 langchain==0.3.25
 langchain-community==0.3.24
 python-dotenv==1.0.0
-requests>=2.31.0
+requests==2.32.3
 huggingface_hub==0.25.2
-twilio==8.18.0  # Compatible version with Python 3.11
+twilio==8.19.0; python_version < '3.11'
+twilio==9.6.2; python_version >= '3.11'
+python-multipart==0.0.9
+transformers==4.40.0
+sentencepiece
+protobuf
