@@ -1,6 +1,7 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from huggingface_hub import InferenceClient
+from pydantic import BaseModel, BaseSettings
 from dotenv import load_dotenv
 import logging
 import os
@@ -15,10 +16,25 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 
+# Environment settings
+class Settings(BaseSettings):
+    huggingface_api_key: str
+    makcorps_api_key: str
+    telegram_token: str
+    twilio_account_sid: str
+    twilio_auth_token: str
+
+    class Config:
+        env_file = ".env"
+
+# Initialize settings
+settings = Settings()
+
 # Initialize FastAPI app
 app = FastAPI(
     title="Tourism Chat Assistant",
-    description="Chat interface using MT5 model for tourism assistance"
+    description="Chat interface using MT5 model for tourism assistance",
+    version="1.0.0"
 )
 
 # Configure CORS
@@ -33,7 +49,7 @@ app.add_middleware(
 try:
     client = InferenceClient(
         "ArsenKe/MT5_large_finetuned_chatbot",
-        token=os.getenv("HUGGINGFACE_API_KEY")
+        token=settings.huggingface_api_key
     )
 except Exception as e:
     logger.error(f"Error initializing client: {str(e)}")
@@ -78,10 +94,25 @@ async def chat_endpoint(request: ChatRequest):
         logger.error(f"Chat error: {str(e)}")
         raise HTTPException(status_code=500, detail="Processing error")
 
-# Health check endpoint
+# Enhanced health check endpoint
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "model": "ArsenKe/MT5_large_finetuned_chatbot"}
+    try:
+        # Test model connection
+        client.get_model_status()
+        return {
+            "status": "healthy",
+            "model": "ArsenKe/MT5_large_finetuned_chatbot",
+            "version": "1.0.0",
+            "services": {
+                "huggingface": "connected",
+                "telegram": bool(settings.telegram_token),
+                "twilio": bool(settings.twilio_account_sid)
+            }
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        raise HTTPException(status_code=503, detail="Service unhealthy")
 
 if __name__ == "__main__":
     import uvicorn

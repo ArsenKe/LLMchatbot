@@ -9,6 +9,8 @@ services:
     envVars:
       - key: HUGGINGFACE_API_KEY
         sync: false
+      - key: MAKCORPS_API_KEY
+        sync: false
       - key: TELEGRAM_TOKEN
         sync: false
       - key: TWILIO_ACCOUNT_SID
