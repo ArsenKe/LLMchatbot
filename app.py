@@ -14,7 +14,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Define request and response models
+# Define request and response models FIRST
 class ChatRequest(BaseModel):
     message: str
     session_id: str = "default"
@@ -25,11 +25,8 @@ class ChatResponse(BaseModel):
     status: str = "success"
 
 class Settings(BaseSettings):
-    # Required settings
     huggingface_api_key: str = Field(..., env="HUGGINGFACE_API_KEY")
     makcorps_api_key: str = Field(..., env="MAKCORPS_API_KEY")
-    
-    # Optional settings
     telegram_token: Optional[str] = Field(default=None, env="TELEGRAM_TOKEN")
     twilio_account_sid: Optional[str] = Field(default=None, env="TWILIO_ACCOUNT_SID")
     twilio_auth_token: Optional[str] = Field(default=None, env="TWILIO_AUTH_TOKEN")
@@ -37,7 +34,6 @@ class Settings(BaseSettings):
 
     class Config:
         case_sensitive = True
-        use_enum_values = True
         extra = "ignore"
 
 # Initialize settings
@@ -80,50 +76,39 @@ async def chat_endpoint(request: ChatRequest):
             "Assistant:"
         )
         
-        # Generate response
-        response = client.text_generation(
-            enhanced_prompt,
-            max_new_tokens=150,
-            temperature=0.7,
-            top_p=0.9
-        )
-        
+        # Check if hotel search is needed
+        if "hotel" in request.message.lower() or "stay" in request.message.lower():
+            # Simplified extraction - in production use NLP
+            location = "Paris"
+            response = hotel_tool.run(location, "2024-06-15")
+        else:
+            response = client.text_generation(
+                enhanced_prompt,
+                max_new_tokens=150,
+                temperature=0.7,
+                top_p=0.9
+            )
+            
         return ChatResponse(
             response=str(response),
-            session_id=request.session_id,
-            status="success"
+            session_id=request.session_id
         )
     except Exception as e:
         logger.error(f"Chat error: {str(e)}")
-        return ChatResponse(
-            response=f"Error processing request: {str(e)}",
-            session_id=request.session_id,
-            status="error"
-        )
+        raise HTTPException(status_code=500, detail="Processing error")
 
 @app.get("/health", response_model=Dict[str, Any])
 async def health_check():
-    try:
-        # Comprehensive health check
-        return {
-            "status": "healthy",
-            "model": "ArsenKe/MT5_large_finetuned_chatbot",
-            "integrations": {
-                "telegram": bool(settings.telegram_token),
-                "whatsapp": bool(settings.twilio_account_sid and settings.twilio_auth_token)
-            }
+    return {
+        "status": "healthy",
+        "model": "ArsenKe/MT5_large_finetuned_chatbot",
+        "integrations": {
+            "telegram": bool(settings.telegram_token),
+            "whatsapp": bool(settings.twilio_account_sid and settings.twilio_auth_token)
         }
-    except Exception as e:
-        logger.error(f"Health check failed: {str(e)}")
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "status": "unhealthy",
-                "error": str(e)
-            }
-        )
+    }
 
-# Conditionally include routers based on settings
+# Conditionally include routers
 if settings.telegram_token:
     from src.routers.telegram import telegram_router
     app.include_router(telegram_router)
