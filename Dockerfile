@@ -1,4 +1,5 @@
 FROM python:3.11-slim
+ENV PYTHONPATH=/app/src
 
 # Install system dependencies and clean up in one layer
 RUN apt-get update && \
@@ -20,7 +21,7 @@ COPY . .
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
-ENV PYTHONPATH=/app
+#ENV PYTHONPATH=/app/src
 ENV PORT=7860
 
 # Expose port
