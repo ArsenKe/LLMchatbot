@@ -5,8 +5,8 @@ from dotenv import load_dotenv
 import logging
 import os
 from src.tools.tourism_tools import hotel_tool  # ✅ Correct
-#from src.routers.telegram import telegram_router
-#from src.routers.whatsapp import whatsapp_router
+from src.routers.telegram import telegram_router
+from src.routers.whatsapp import whatsapp_router
 from src.tools.tourism_tools import hotel_tool
 from huggingface_hub import InferenceClient
 
