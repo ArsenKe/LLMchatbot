@@ -1,14 +1,13 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings  # Updated import
-#from dotenv import load_dotenv
+from dotenv import load_dotenv
 import logging
 import os
 from src.tools.tourism_tools import hotel_tool  # ✅ Correct
-from src.routers.telegram import telegram_router
-from src.routers.whatsapp import whatsapp_router
+#from src.routers.telegram import telegram_router
+#from src.routers.whatsapp import whatsapp_router
 from src.tools.tourism_tools import hotel_tool
-#from twilio_whatsapp import whatsapp_router
 from huggingface_hub import InferenceClient
 
 # Configure logging
