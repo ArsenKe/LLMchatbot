@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings  # Updated import
 from dotenv import load_dotenv
 import logging
 import os
-from tourism_tools import hotel_tool
+from src.tools.tourism_tools import hotel_tool  # ✅ Correct
 from src.routers.telegram import telegram_router
 from src.routers.whatsapp import whatsapp_router
 from src.tools.tourism_tools import hotel_tool

@@ -1,5 +1,5 @@
 FROM python:3.11-slim
-ENV PYTHONPATH=/app/src
+ENV PYTHONPATH=/app
 
 # Install system dependencies and clean up in one layer
 RUN apt-get update && \
