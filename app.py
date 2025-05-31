@@ -1,8 +1,9 @@
-from fastapi import FastAPI, HTTPException, Depends
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
-from typing import Optional, Dict, Any
+from typing import Optional
 import logging
+import os
 from huggingface_hub import InferenceClient
 from src.tools.tourism_tools import hotel_tool
 
@@ -10,31 +11,40 @@ from src.tools.tourism_tools import hotel_tool
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+if os.getenv("DEBUG"):
+    logger.setLevel(logging.DEBUG)
+    # Log environment variables (excluding sensitive values)
+    env_vars = {k: '***' if 'KEY' in k or 'TOKEN' in k else v 
+                for k, v in os.environ.items()}
+    logger.debug(f"Environment variables: {env_vars}")
+
 class Settings(BaseSettings):
-    huggingface_api_key: str
-    makcorps_api_key: str
-    telegram_token: Optional[str] = None
-    twilio_account_sid: Optional[str] = None
-    twilio_auth_token: Optional[str] = None
-    weather_api_key: Optional[str] = None  # Add this
-    firebase_credentials: Optional[str] = None  # Add this
+    # Required settings with aliases matching environment variable names
+    huggingface_api_key: str = Field(..., alias="HUGGINGFACE_API_KEY")
+    makcorps_api_key: str = Field(..., alias="MAKCORPS_API_KEY")
+    
+    # Optional settings
+    telegram_token: Optional[str] = Field(None, alias="TELEGRAM_TOKEN")
+    twilio_account_sid: Optional[str] = Field(None, alias="TWILIO_ACCOUNT_SID")
+    twilio_auth_token: Optional[str] = Field(None, alias="TWILIO_AUTH_TOKEN")
+    firebase_credentials: Optional[str] = Field(None, alias="FIREBASE_CREDENTIALS")
 
     class Config:
         env_file = ".env"
         case_sensitive = True
-        extra = "ignore"  # Add this to ignore extra env vars
+        env_file_encoding = 'utf-8'
+        use_enum_values = True
 
-class ChatRequest(BaseModel):
-    message: str
-    session_id: str = "default"
-
-class ChatResponse(BaseModel):
-    response: str
-    session_id: str
-    status: str = "success"
-
-# Initialize settings
-settings = Settings()
+# Initialize settings with environment validation
+try:
+    settings = Settings()
+    logger.info("Settings loaded successfully")
+    # Log available integrations
+    logger.info(f"Telegram enabled: {bool(settings.telegram_token)}")
+    logger.info(f"WhatsApp enabled: {bool(settings.twilio_account_sid and settings.twilio_auth_token)}")
+except Exception as e:
+    logger.error(f"Failed to load settings: {str(e)}")
+    raise
 
 # Initialize FastAPI app
 app = FastAPI(
