@@ -26,3 +26,4 @@ python-multipart==0.0.9
 transformers==4.40.0
 sentencepiece
 protobuf
+firebase-admin==6.5.0  # Added Firebase Admin SDK
