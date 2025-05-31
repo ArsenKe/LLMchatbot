@@ -2,12 +2,32 @@ from fastapi import APIRouter, Request, HTTPException
 import requests
 import os
 import logging
+from huggingface_hub import InferenceClient
+from typing import Dict, Any
 
-router = APIRouter(prefix="/telegram", tags=["telegram"])
+# Initialize router with explicit name
+telegram_router = APIRouter(
+    prefix="/telegram", 
+    tags=["telegram"],
+    responses={404: {"description": "Not found"}}
+)
+
+# Configure logging
 logger = logging.getLogger(__name__)
 
-@router.post("/webhook")
+# Initialize HuggingFace client with error handling
+try:
+    client = InferenceClient(
+        "ArsenKe/MT5_large_finetuned_chatbot",
+        token=os.getenv("HUGGINGFACE_API_KEY")
+    )
+except Exception as e:
+    logger.error(f"Failed to initialize HuggingFace client: {e}")
+    raise
+
+@telegram_router.post("/webhook", response_model=Dict[str, Any])
 async def telegram_webhook(request: Request):
+    """Handle incoming Telegram webhook requests"""
     try:
         data = await request.json()
         message = data["message"]["text"]
@@ -28,7 +48,11 @@ async def telegram_webhook(request: Request):
         )
         telegram_response.raise_for_status()
         
-        return {"status": "success"}
+        return {"status": "success", "response": str(response)}
+        
     except Exception as e:
         logger.error(f"Telegram error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# Explicitly export the router
+__all__ = ['telegram_router']
