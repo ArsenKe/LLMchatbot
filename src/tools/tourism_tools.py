@@ -2,10 +2,16 @@ from langchain.tools import tool
 import requests
 import os
 import logging
+import json
+from firebase_admin import credentials, initialize_app
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+
 
 @tool
 def search_hotels(location: str, checkin_date: str) -> str:

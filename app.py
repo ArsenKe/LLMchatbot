@@ -1,39 +1,40 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
-from pydantic_settings import BaseSettings  # Updated import
-from dotenv import load_dotenv
+from pydantic_settings import BaseSettings
+from typing import Optional, Dict, Any
 import logging
-import os
-from src.tools.tourism_tools import hotel_tool  # ✅ Correct
-from src.routers.telegram import telegram_router
-from src.routers.whatsapp import whatsapp_router
-from src.tools.tourism_tools import hotel_tool
 from huggingface_hub import InferenceClient
+from src.tools.tourism_tools import hotel_tool
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Load environment variables
-load_dotenv()
-
-# Environment settings
-class Settings(BaseSettings):  # Now from pydantic_settings
+class Settings(BaseSettings):
     huggingface_api_key: str
     makcorps_api_key: str
-    telegram_token: str
-    twilio_account_sid: str
-    twilio_auth_token: str
+    telegram_token: Optional[str] = None
+    twilio_account_sid: Optional[str] = None
+    twilio_auth_token: Optional[str] = None
+    weather_api_key: Optional[str] = None  # Add this
+    firebase_credentials: Optional[str] = None  # Add this
 
     class Config:
         env_file = ".env"
+        case_sensitive = True
+        extra = "ignore"  # Add this to ignore extra env vars
+
+class ChatRequest(BaseModel):
+    message: str
+    session_id: str = "default"
+
+class ChatResponse(BaseModel):
+    response: str
+    session_id: str
+    status: str = "success"
 
 # Initialize settings
-try:
-    settings = Settings()
-except Exception as e:
-    logger.error(f"Configuration error: {str(e)}")
-    raise
+settings = Settings()
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -52,16 +53,7 @@ except Exception as e:
     logger.error(f"Error initializing client: {str(e)}")
     raise
 
-# Import and include routers
-app.include_router(telegram_router, prefix="/telegram")
-app.include_router(whatsapp_router, prefix="/whatsapp")
-
-# Request model
-class ChatRequest(BaseModel):
-    message: str
-    session_id: str = "default"
-
-@app.post("/chat")
+@app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
     try:
         # Enhanced context-aware prompt
@@ -75,8 +67,8 @@ async def chat_endpoint(request: ChatRequest):
         
         # Check if hotel search is needed
         if "hotel" in request.message.lower() or "stay" in request.message.lower():
-            # Extract parameters from message
-            location = "Paris"  # Simplified - use NLP in production
+            # Extract parameters from message (simplified)
+            location = "Paris"  # TODO: Use NLP to extract location
             response = hotel_tool.run(location, "2024-06-15")
         else:
             response = client.text_generation(
@@ -86,22 +78,52 @@ async def chat_endpoint(request: ChatRequest):
                 top_p=0.9
             )
             
-        return {"response": response, "session_id": request.session_id}
+        return ChatResponse(
+            response=str(response),
+            session_id=request.session_id
+        )
     except Exception as e:
         logger.error(f"Chat error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Processing error")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Processing error",
+                "message": str(e)
+            }
+        )
 
-@app.get("/health")
+@app.get("/health", response_model=Dict[str, Any])
 async def health_check():
     try:
-        # Simple health check
+        # Comprehensive health check
         return {
             "status": "healthy",
-            "model": "ArsenKe/MT5_large_finetuned_chatbot"
+            "model": "ArsenKe/MT5_large_finetuned_chatbot",
+            "integrations": {
+                "telegram": bool(settings.telegram_token),
+                "whatsapp": bool(settings.twilio_account_sid and settings.twilio_auth_token)
+            }
         }
     except Exception as e:
         logger.error(f"Health check failed: {str(e)}")
-        raise HTTPException(status_code=503, detail="Service unhealthy")
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "unhealthy",
+                "error": str(e)
+            }
+        )
+
+# Conditionally include routers based on settings
+if settings.telegram_token:
+    from src.routers.telegram import telegram_router
+    app.include_router(telegram_router)
+    logger.info("Telegram bot enabled")
+
+if settings.twilio_account_sid and settings.twilio_auth_token:
+    from src.routers.whatsapp import whatsapp_router
+    app.include_router(whatsapp_router)
+    logger.info("WhatsApp integration enabled")
 
 if __name__ == "__main__":
     import uvicorn
