@@ -6,45 +6,41 @@ import logging
 import os
 from huggingface_hub import InferenceClient
 from src.tools.tourism_tools import hotel_tool
-from pydantic import Field
 
-
-# Configure logging with more detail
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# Debug logging for environment variables
-logger.info("Checking environment variables:")
-for key in [
-    "HUGGINGFACE_API_KEY", 
-    "MAKCORPS_API_KEY", 
-    "TELEGRAM_TOKEN",
-    "TWILIO_ACCOUNT_SID", 
-    "TWILIO_AUTH_TOKEN",
-    "FIREBASE_CREDENTIALS"
-]:
-    logger.info(f"{key}: {'SET' if os.getenv(key) else 'MISSING'}")
+# Define request and response models
+class ChatRequest(BaseModel):
+    message: str
+    session_id: str = "default"
+
+class ChatResponse(BaseModel):
+    response: str
+    session_id: str
+    status: str = "success"
 
 class Settings(BaseSettings):
     # Required settings
-    huggingface_api_key: str = Field(..., alias="HUGGINGFACE_API_KEY")
-    makcorps_api_key: str = Field(..., alias="MAKCORPS_API_KEY")
+    huggingface_api_key: str = Field(..., env="HUGGINGFACE_API_KEY")
+    makcorps_api_key: str = Field(..., env="MAKCORPS_API_KEY")
     
     # Optional settings
-    telegram_token: Optional[str] = Field(default=None, alias="TELEGRAM_TOKEN")
-    twilio_account_sid: Optional[str] = Field(default=None, alias="TWILIO_ACCOUNT_SID")
-    twilio_auth_token: Optional[str] = Field(default=None, alias="TWILIO_AUTH_TOKEN")
-    firebase_credentials: Optional[str] = Field(default=None, alias="FIREBASE_CREDENTIALS")
+    telegram_token: Optional[str] = Field(default=None, env="TELEGRAM_TOKEN")
+    twilio_account_sid: Optional[str] = Field(default=None, env="TWILIO_ACCOUNT_SID")
+    twilio_auth_token: Optional[str] = Field(default=None, env="TWILIO_AUTH_TOKEN")
+    firebase_credentials: Optional[str] = Field(default=None, env="FIREBASE_CREDENTIALS")
 
     class Config:
         case_sensitive = True
         use_enum_values = True
         extra = "ignore"
 
-# Initialize settings with environment validation
+# Initialize settings
 try:
     settings = Settings()
     logger.info("Settings loaded successfully")
@@ -67,8 +63,9 @@ try:
         "ArsenKe/MT5_large_finetuned_chatbot",
         token=settings.huggingface_api_key
     )
+    logger.info("HuggingFace client initialized successfully")
 except Exception as e:
-    logger.error(f"Error initializing client: {str(e)}")
+    logger.error(f"Failed to initialize HuggingFace client: {str(e)}")
     raise
 
 @app.post("/chat", response_model=ChatResponse)
@@ -83,31 +80,25 @@ async def chat_endpoint(request: ChatRequest):
             "Assistant:"
         )
         
-        # Check if hotel search is needed
-        if "hotel" in request.message.lower() or "stay" in request.message.lower():
-            # Extract parameters from message (simplified)
-            location = "Paris"  # TODO: Use NLP to extract location
-            response = hotel_tool.run(location, "2024-06-15")
-        else:
-            response = client.text_generation(
-                enhanced_prompt,
-                max_new_tokens=150,
-                temperature=0.7,
-                top_p=0.9
-            )
-            
+        # Generate response
+        response = client.text_generation(
+            enhanced_prompt,
+            max_new_tokens=150,
+            temperature=0.7,
+            top_p=0.9
+        )
+        
         return ChatResponse(
             response=str(response),
-            session_id=request.session_id
+            session_id=request.session_id,
+            status="success"
         )
     except Exception as e:
         logger.error(f"Chat error: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "Processing error",
-                "message": str(e)
-            }
+        return ChatResponse(
+            response=f"Error processing request: {str(e)}",
+            session_id=request.session_id,
+            status="error"
         )
 
 @app.get("/health", response_model=Dict[str, Any])
