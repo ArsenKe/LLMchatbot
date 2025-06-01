@@ -25,16 +25,16 @@ class ChatResponse(BaseModel):
     status: str = "success"
 
 class Settings(BaseSettings):
-    huggingface_api_key: str = Field(..., env="HUGGINGFACE_API_KEY")
-    makcorps_api_key: str = Field(..., env="MAKCORPS_API_KEY")
+    huggingface_api_key: Optional[str] = Field(default=None, env="HUGGINGFACE_API_KEY")
+    makcorps_api_key: Optional[str] = Field(default=None, env="MAKCORPS_API_KEY")
     telegram_token: Optional[str] = Field(default=None, env="TELEGRAM_TOKEN")
     twilio_account_sid: Optional[str] = Field(default=None, env="TWILIO_ACCOUNT_SID")
     twilio_auth_token: Optional[str] = Field(default=None, env="TWILIO_AUTH_TOKEN")
     firebase_credentials: Optional[str] = Field(default=None, env="FIREBASE_CREDENTIALS")
 
     class Config:
-        case_sensitive = True
-        extra = "ignore"
+        env_file = ".env"
+        extra = "allow" 
 
 # Initialize settings
 try:
@@ -45,6 +45,13 @@ try:
 except Exception as e:
     logger.error(f"Failed to load settings: {str(e)}")
     raise
+
+# Check for required API keys
+if not settings.huggingface_api_key or not settings.makcorps_api_key:
+    logger.error("Missing required API keys in environment variables")
+    logger.error(f"HUGGINGFACE_API_KEY: {settings.huggingface_api_key}")
+    logger.error(f"MAKCORPS_API_KEY: {settings.makcorps_api_key}")
+    raise RuntimeError("Missing required API keys in environment variables")
 
 # Initialize FastAPI app
 app = FastAPI(
