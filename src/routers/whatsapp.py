@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Form, Response
 from twilio.twiml.messaging_response import MessagingResponse
 import logging
+from src.agents.tourism_agent import TourismAgent
 from huggingface_hub import InferenceClient
 import os
-from typing import Optional
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -14,46 +14,42 @@ whatsapp_router = APIRouter(
     tags=["whatsapp"]
 )
 
-# Initialize HuggingFace client
-try:
-    client = InferenceClient(
-        "ArsenKe/MT5_large_finetuned_chatbot",
-        token=os.getenv("HUGGINGFACE_API_KEY")
-    )
-except Exception as e:
-    logger.error(f"Failed to initialize HuggingFace client: {e}")
-    raise
+# Initialize HuggingFace client and agent
+client = InferenceClient(
+    "ArsenKe/MT5_large_finetuned_chatbot",
+    token=os.getenv("HUGGINGFACE_API_KEY")
+)
+agent = TourismAgent(llm_client=client, hotel_api=None)
 
 @whatsapp_router.post("/webhook")
-async def whatsapp_webhook(Body: str = Form(...)):
+async def whatsapp_webhook(
+    From: str = Form(...),
+    Body: str = Form(...)
+):
     """
-    Handle incoming WhatsApp messages
+    Handle incoming WhatsApp messages from Twilio.
     
     Args:
+        From (str): The sender's phone number.
         Body (str): The message content from WhatsApp
         
     Returns:
         Response: TwiML response with AI-generated message
     """
     try:
-        # Generate response using MT5
-        ai_response = client.text_generation(
-            Body,
-            max_new_tokens=150,
-            temperature=0.7,
-            do_sample=True
-        )
-        
-        # Create TwiML response
+        logger.info(f"Received WhatsApp message from {From}: {Body}")
+        # Use your agent to process the message
+        result = agent.process_message(Body)
+        reply = result["response"]
+
+        # Twilio expects a TwiML XML response
         resp = MessagingResponse()
-        resp.message(str(ai_response))
-        
+        resp.message(reply)
         return Response(
             content=str(resp),
             media_type="application/xml",
             headers={"Content-Type": "application/xml; charset=utf-8"}
         )
-        
     except Exception as e:
         logger.error(f"WhatsApp webhook error: {str(e)}")
         fallback = MessagingResponse()

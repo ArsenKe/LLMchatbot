@@ -6,6 +6,7 @@ import logging
 import os
 from huggingface_hub import InferenceClient
 from src.tools.tourism_tools import hotel_tool
+from src.agents.tourism_agent import TourismAgent
 
 # Configure logging
 logging.basicConfig(
@@ -71,34 +72,17 @@ except Exception as e:
     logger.error(f"Failed to initialize HuggingFace client: {str(e)}")
     raise
 
+# Initialize agent after creating client
+agent = TourismAgent(llm_client=client, hotel_api=None)
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
     try:
-        # Enhanced context-aware prompt
-        enhanced_prompt = (
-            "You are a tourism assistant specializing in hotel bookings. "
-            "When asked about hotels, use the hotel search tool. "
-            "For other travel questions, provide helpful advice.\n\n"
-            f"User: {request.message}\n"
-            "Assistant:"
-        )
-        
-        # Check if hotel search is needed
-        if "hotel" in request.message.lower() or "stay" in request.message.lower():
-            # Simplified extraction - in production use NLP
-            location = "Paris"
-            response = hotel_tool.run(location, "2024-06-15")
-        else:
-            response = client.text_generation(
-                enhanced_prompt,
-                max_new_tokens=150,
-                temperature=0.7,
-                top_p=0.9
-            )
-            
+        result = agent.process_message(request.message)
         return ChatResponse(
-            response=str(response),
-            session_id=request.session_id
+            response=result["response"],
+            session_id=request.session_id,
+            # Optionally: hotels=result.get("hotels", [])
         )
     except Exception as e:
         logger.error(f"Chat error: {str(e)}")
