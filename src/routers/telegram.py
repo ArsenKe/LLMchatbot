@@ -4,6 +4,7 @@ import os
 import logging
 from huggingface_hub import InferenceClient
 from typing import Dict, Any
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 # Initialize router with explicit name
 telegram_router = APIRouter(
@@ -24,6 +25,14 @@ try:
 except Exception as e:
     logger.error(f"Failed to initialize HuggingFace client: {e}")
     raise
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+def query_model(payload):
+    API_URL = "https://api-inference.huggingface.co/models/ArsenKe/MT5_large_finetuned_chatbot"
+    headers = {"Authorization": f"Bearer {os.getenv('HUGGINGFACE_API_KEY')}"}
+    response = requests.post(API_URL, headers=headers, json=payload)
+    response.raise_for_status()
+    return response.json()
 
 @telegram_router.post("/webhook", response_model=Dict[str, Any])
 async def telegram_webhook(request: Request):
