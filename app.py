@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
 from typing import Optional, Dict, Any
@@ -9,7 +9,7 @@ from src.tools.tourism_tools import hotel_tool
 from src.agents.tourism_agent import TourismAgent
 from src.routers.whatsapp import create_whatsapp_router
 from src.routers.telegram import create_telegram_router
-from src.agent import Agent  # Adjust import as needed
+from src.agents.tourism_agent import TourismAgent
 
 # Configure logging
 logging.basicConfig(
@@ -121,18 +121,36 @@ if settings.twilio_account_sid and settings.twilio_auth_token:
     app.include_router(whatsapp_router)
     logger.info("WhatsApp integration enabled")
 
-WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "MY_SUPER_SECRET")  # Default for local/dev
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "MY_SUPER_SECRET")  # Use env or default
 
 @app.post("/webhook")
-async def handle_webhook(request):
-    received_secret = request.headers.get("X-Webhook-Secret")
-    if received_secret != WEBHOOK_SECRET:
-        logger.warning("Unauthorized webhook attempt")
-        raise HTTPException(status_code=403, detail="Unauthorized")
-    payload = await request.json()
-    logger.info(f"Received Hugging Face webhook: {payload}")
-    # TODO: Add your custom logic here (e.g., retrain model, notify admin, etc.)
-    return {"status": "success"}
+async def handle_huggingface_webhook(request: Request):
+    try:
+        secret = request.headers.get("X-Webhook-Secret")
+        if secret != WEBHOOK_SECRET:
+            logger.warning("Invalid webhook secret")
+            raise HTTPException(status_code=403, detail="Invalid webhook secret")
+
+        payload = await request.json()
+        logger.info(f"Received HuggingFace webhook: {payload}")
+
+        # Example: Handle repo update trigger
+        if payload.get("event") == "repo_update":
+            repo = payload.get("repo", {})
+            logger.info(f"Repository updated: {repo.get('name')} at {repo.get('updated_at')}")
+            # Optional: Reload the model from Hugging Face Hub
+            global client, agent
+            try:
+                client = InferenceClient("ArsenKe/MT5_large_finetuned_chatbot", token=settings.huggingface_api_key)
+                agent = TourismAgent(llm_client=client, hotel_api=None)
+                logger.info("Model reloaded after repo update")
+            except Exception as e:
+                logger.error(f"Error reloading model: {str(e)}")
+
+        return {"status": "received"}
+    except Exception as e:
+        logger.error(f"Webhook error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Webhook processing failed")
 
 if __name__ == "__main__":
     import uvicorn
