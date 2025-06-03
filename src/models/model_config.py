@@ -1,26 +1,49 @@
-class ModelConfig:
-    def __init__(self):
-        self.model_name = "ArsenKe/MT5_large_finetuned_chatbot"  # Replace with your model
-        self.learning_rate = 0.001
-        self.batch_size = 32
-        self.epochs = 10
-        self.input_shape = (128, 128, 3)
-        self.output_shape = 10
-        
-        # Add LLM-specific configurations
-        self.max_length = 512
-        self.temperature = 0.7
-        self.top_p = 0.9
-        self.do_sample = True
+from pydantic import BaseModel
+from typing import Optional
 
-    def display_config(self):
-        config = {
-            "Model Name": self.model_name,
-            "Learning Rate": self.learning_rate,
-            "Batch Size": self.batch_size,
-            "Epochs": self.epochs,
-            "Input Shape": self.input_shape,
-            "Output Shape": self.output_shape,
+class ModelConfig(BaseModel):
+    """Configuration for the model"""
+    model_name: str = "ArsenKe/MT5_large_finetuned_chatbot"
+    learning_rate: float = 0.001
+    batch_size: int = 32
+    epochs: int = 10
+    input_shape: tuple = (128, 128, 3)
+    output_shape: int = 10
+
+    class Config:
+        """Pydantic configuration"""
+        arbitrary_types_allowed = True
+
+class LLMConfig(BaseModel):
+    """Configuration for language models"""
+    model_name: str = "ArsenKe/MT5_large_finetuned_chatbot"
+    temperature: float = 0.7
+    max_length: int = 512
+    top_p: float = 0.9
+    top_k: int = 50
+    repetition_penalty: float = 1.2
+    do_sample: bool = True
+    num_return_sequences: int = 1
+    device: Optional[str] = None  # "cuda", "mps", "cpu"
+    timeout: int = 120  # Seconds for API timeout
+
+    def generation_params(self) -> dict:
+        """Get parameters for text generation"""
+        return {
+            "temperature": self.temperature,
+            "max_length": self.max_length,
+            "top_p": self.top_p,
+            "top_k": self.top_k,
+            "repetition_penalty": self.repetition_penalty,
+            "do_sample": self.do_sample,
+            "num_return_sequences": self.num_return_sequences
         }
-        for key, value in config.items():
-            print(f"{key}: {value}")
+    
+    def __str__(self):
+        return (
+            f"Model: {self.model_name}\n"
+            f"Temperature: {self.temperature}\n"
+            f"Max Length: {self.max_length}\n"
+            f"Top-p: {self.top_p}\n"
+            f"Top-k: {self.top_k}"
+        )

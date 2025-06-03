@@ -1,9 +1,10 @@
 import requests
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 import os
 import logging
 from dotenv import load_dotenv
+import json
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -11,127 +12,124 @@ logger = logging.getLogger(__name__)
 class BookingAPIClient:
     def __init__(self):
         load_dotenv()
-        self.base_url = "https://api.makcorps.com/city"  # Updated endpoint
+        self.base_url = "https://api.makcorps.com/city"
         self.api_key = os.getenv("MAKCORPS_API_KEY")
-        self.use_simulation = os.getenv("USE_SIMULATION", "true").lower() == "true"
+        self.use_simulation = os.getenv("USE_SIMULATION", "false").lower() == "true"
+        
+        if not self.api_key and not self.use_simulation:
+            logger.warning("MakCorps API key missing. Falling back to simulation mode")
+            self.use_simulation = True
 
-    def get_hotels(
+    def search_hotels(
         self,
         location: str,
         checkin_date: str,
         checkout_date: Optional[str] = None,
         guest_count: int = 2
     ) -> Dict[str, Any]:
-        """Search for hotels using MakCorps API"""
-        
+        """Search hotels using MakCorps API with robust error handling"""
         if self.use_simulation:
             return self._get_simulated_data(location, checkin_date)
-            
-        # Extract city ID if provided in format "City (ID)"
-        city_id = location.split("(")[-1].strip(")") if "(" in location else location
         
-        # Prepare request data
-        data = {
+        # Extract city ID from location string
+        city_id = self._extract_city_id(location)
+        checkout = checkout_date or self._calculate_checkout(checkin_date)
+        
+        params = {
             "api_key": self.api_key,
             "cityid": city_id,
             "checkin": checkin_date,
-            "checkout": checkout_date or (
-                datetime.strptime(checkin_date, "%Y-%m-%d") + 
-                timedelta(days=1)
-            ).strftime("%Y-%m-%d"),
+            "checkout": checkout,
             "adults": guest_count
         }
         
         try:
-            # Try POST request first
-            response = requests.post(
+            response = requests.get(
                 self.base_url,
-                json=data,
-                timeout=10
+                params=params,
+                timeout=15
             )
-            
-            # Log response for debugging
-            logger.debug(f"Status Code: {response.status_code}")
-            logger.debug(f"Response Text: {response.text}")
-            
             response.raise_for_status()
-            return self._format_response(response.json())
-            
+            return self._format_response(response.json(), location, checkin_date, checkout)
         except requests.exceptions.RequestException as e:
             logger.error(f"API request failed: {e}")
-            if self.use_simulation:
-                return self._get_simulated_data(location, checkin_date)
+            return self._get_simulated_data(location, checkin_date)
+        except (ValueError, KeyError) as e:
+            logger.error(f"Response parsing failed: {e}")
             return {
                 "status": "error",
-                "message": f"API request failed: {str(e)}"
+                "message": "Failed to parse hotel data"
             }
-    
+
+    def _extract_city_id(self, location: str) -> str:
+        """Extract city ID from location string if available"""
+        if "(" in location and ")" in location:
+            return location.split("(")[-1].split(")")[0].strip()
+        return location
+
+    def _calculate_checkout(self, checkin_date: str) -> str:
+        """Calculate checkout date (1 day after checkin)"""
+        return (datetime.strptime(checkin_date, "%Y-%m-%d") + 
+                timedelta(days=1)).strftime("%Y-%m-%d")
+
     def _get_simulated_data(self, location: str, checkin_date: str) -> Dict[str, Any]:
         """Return simulated hotel data for testing"""
+        checkout_date = self._calculate_checkout(checkin_date)
         return {
             "status": "success",
             "hotels": [
                 {
+                    "id": "sim_001",
                     "name": f"Luxury Hotel in {location}",
-                    "price_booking": "$250",
-                    "price_expedia": "$245",
-                    "price_hotels": "$255",
                     "rating": 4.8,
-                    "city_id": "12345"
+                    "price": 250,
+                    "currency": "EUR",
+                    "location": location,
+                    "checkin": checkin_date,
+                    "checkout": checkout_date,
+                    "url": "https://example.com/hotel1"
                 },
                 {
+                    "id": "sim_002",
                     "name": f"Boutique Hotel in {location}",
-                    "price_booking": "$180",
-                    "price_expedia": "$175",
-                    "price_hotels": "$185",
                     "rating": 4.5,
-                    "city_id": "12345"
+                    "price": 180,
+                    "currency": "EUR",
+                    "location": location,
+                    "checkin": checkin_date,
+                    "checkout": checkout_date,
+                    "url": "https://example.com/hotel2"
                 }
-            ],
-            "location": location,
-            "dates": {
-                "checkin": checkin_date,
-                "checkout": (
-                    datetime.strptime(checkin_date, "%Y-%m-%d") + 
-                    timedelta(days=1)
-                ).strftime("%Y-%m-%d")
-            }
+            ]
         }
     
-    def _format_response(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Format API response with consistent price data"""
+    def _format_response(self, data: List[Dict[str, Any]], 
+                        location: str, 
+                        checkin: str, 
+                        checkout: str) -> Dict[str, Any]:
+        """Standardize API response format"""
         hotels = []
-        for hotel in data.get("hotels", []):
-            # Extract prices from various fields
-            prices = []
-            
-            # Handle direct price field
-            if "price" in hotel:
-                if isinstance(hotel["price"], dict):
-                    amount = hotel["price"].get("amount")
-                    currency = hotel["price"].get("currency", "USD")
-                    if amount:
-                        prices.append(f"Base Price: {amount} {currency}")
-                elif hotel["price"]:
-                    prices.append(f"Base Price: {hotel['price']}")
-            
-            # Handle vendor-specific prices
-            for key, value in hotel.items():
-                if key.startswith("price_") and value:
-                    vendor = key.replace("price_", "").title()
-                    prices.append(f"{vendor}: {value}")
-            
-            # Create formatted hotel entry
+        for hotel in data:
+            # Skip invalid entries
+            if not isinstance(hotel, dict):
+                continue
+                
             hotels.append({
+                "id": hotel.get("id", ""),
                 "name": hotel.get("name", "Unknown Hotel"),
-                "rating": hotel.get("rating", "N/A"),
-                "prices": prices or ["Price information not available"],
-                "location": data.get("location", "Unknown Location"),
-                "dates": data.get("dates", {})
+                "rating": hotel.get("rating", hotel.get("reviews", {}).get("rating", 0)),
+                "price": hotel.get("price", 0),
+                "currency": hotel.get("currency", "EUR"),
+                "location": location,
+                "checkin": checkin,
+                "checkout": checkout,
+                "url": hotel.get("url", "")
             })
         
         return {
             "status": "success",
-            "hotels": hotels,
-            "total_found": len(hotels)
+            "location": location,
+            "checkin": checkin,
+            "checkout": checkout,
+            "hotels": hotels
         }

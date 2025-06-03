@@ -7,6 +7,9 @@ import os
 from huggingface_hub import InferenceClient
 from src.tools.tourism_tools import hotel_tool
 from src.agents.tourism_agent import TourismAgent
+from src.routers.whatsapp import create_whatsapp_router
+from src.routers.telegram import create_telegram_router
+from src.agent import Agent  # Adjust import as needed
 
 # Configure logging
 logging.basicConfig(
@@ -75,6 +78,10 @@ except Exception as e:
 # Initialize agent after creating client
 agent = TourismAgent(llm_client=client, hotel_api=None)
 
+# Register routers with the shared agent
+app.include_router(create_whatsapp_router(agent))
+app.include_router(create_telegram_router(agent))
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
     try:
@@ -99,6 +106,10 @@ async def health_check():
         }
     }
 
+@app.get("/")
+async def root():
+    return {"message": "Welcome to the Tourism Chatbot API! Visit /health for status."}
+
 # Conditionally include routers
 if settings.telegram_token:
     from src.routers.telegram import telegram_router
@@ -109,6 +120,19 @@ if settings.twilio_account_sid and settings.twilio_auth_token:
     from src.routers.whatsapp import whatsapp_router
     app.include_router(whatsapp_router)
     logger.info("WhatsApp integration enabled")
+
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "MY_SUPER_SECRET")  # Default for local/dev
+
+@app.post("/webhook")
+async def handle_webhook(request):
+    received_secret = request.headers.get("X-Webhook-Secret")
+    if received_secret != WEBHOOK_SECRET:
+        logger.warning("Unauthorized webhook attempt")
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    payload = await request.json()
+    logger.info(f"Received Hugging Face webhook: {payload}")
+    # TODO: Add your custom logic here (e.g., retrain model, notify admin, etc.)
+    return {"status": "success"}
 
 if __name__ == "__main__":
     import uvicorn

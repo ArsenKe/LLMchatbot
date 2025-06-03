@@ -1,21 +1,41 @@
 from pydantic import BaseModel, ConfigDict
 from typing import List, Optional, Dict, Any
+from datetime import date
 
-class HotelSearchConfig(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+class HotelSearchRequest(BaseModel):
+    """Request model for hotel searches"""
     location: str
-    checkin_date: str
-    checkout_date: Optional[str] = None
+    checkin_date: date
+    checkout_date: Optional[date] = None
     guest_count: int = 2
+    currency: str = "EUR"
 
 class PriceInfo(BaseModel):
-    amount: Optional[float] = None
-    currency: str = "USD"
+    """Detailed price information"""
+    amount: float
+    currency: str
+    source: str  # e.g., "MakCorps", "Booking.com"
 
-class HotelData(BaseModel):
+class HotelDetails(BaseModel):
+    """Detailed hotel information"""
     model_config = ConfigDict(arbitrary_types_allowed=True)
+    id: str
     name: str
     rating: Optional[float] = None
-    prices: List[str] = []
-    location: Optional[str] = None
-    dates: Dict[str, Any] = {}
+    description: Optional[str] = None
+    amenities: List[str] = []
+    prices: List[PriceInfo] = []
+    location: str
+    checkin_date: date
+    checkout_date: date
+    image_url: Optional[str] = None
+    booking_url: str
+
+class HotelSearchResponse(BaseModel):
+    """Standardized hotel search response"""
+    status: str  # "success" or "error"
+    location: str
+    checkin_date: date
+    checkout_date: date
+    hotels: List[HotelDetails]
+    message: Optional[str] = None  # For error messages
