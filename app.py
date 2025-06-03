@@ -112,13 +112,13 @@ async def root():
 
 # Conditionally include routers
 if settings.telegram_token:
-    from src.routers.telegram import telegram_router
-    app.include_router(telegram_router)
+    from src.routers.telegram import create_telegram_router
+    app.include_router(create_telegram_router(agent))
     logger.info("Telegram bot enabled")
 
 if settings.twilio_account_sid and settings.twilio_auth_token:
-    from src.routers.whatsapp import whatsapp_router
-    app.include_router(whatsapp_router)
+    from src.routers.whatsapp import create_whatsapp_router
+    app.include_router(create_whatsapp_router(agent))
     logger.info("WhatsApp integration enabled")
 
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "MY_SUPER_SECRET")  # Use env or default
